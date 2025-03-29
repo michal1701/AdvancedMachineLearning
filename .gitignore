@@ -3,3 +3,4 @@
 
 # ignore jupyter notebook folders
 .ipynb_checkpoints
+__pycache__/

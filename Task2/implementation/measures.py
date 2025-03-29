@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 
-from sklearn.metrics import recall_score, precision_score, f1_score, balanced_accuracy_score, roc_auc_score, precision_recall_curve
+from sklearn.metrics import recall_score, precision_score, f1_score, balanced_accuracy_score, roc_auc_score, average_precision_score
 
 class IMeasure(ABC):
     @staticmethod
@@ -102,8 +102,8 @@ class Measure:
     
     class AUC_ROC(IMeasure):
         @staticmethod
-        def get(true, pred):
-            return roc_auc_score(true, pred)
+        def get(true, scores):
+            return roc_auc_score(true, scores)
 
         @staticmethod
         def get_name():
@@ -115,9 +115,8 @@ class Measure:
     
     class AUC_PR(IMeasure):
         @staticmethod
-        def get(true, pred):
-            """ it returns (precision, recall, thresholds), not one value """
-            return precision_recall_curve(true, pred)
+        def get(true, scores):
+            return average_precision_score(true, scores)
 
         @staticmethod
         def get_name():
