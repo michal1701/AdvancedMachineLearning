@@ -3,6 +3,7 @@ from enum import Enum, auto
 
 from sklearn.metrics import recall_score, precision_score, f1_score, balanced_accuracy_score, roc_auc_score, average_precision_score
 
+# interface of Measure
 class IMeasure(ABC):
     @staticmethod
     @abstractmethod
@@ -20,6 +21,7 @@ class IMeasure(ABC):
         return
 
 class Measure:
+    # finite number of specified measures
     class Type(Enum):
         recall = auto()
         precision = auto()
@@ -28,6 +30,7 @@ class Measure:
         AUC_ROC = auto()
         AUC_PR = auto()
 
+    # get Measure object based on passed Measure.Type
     @staticmethod
     def from_type(p_type: "Measure.Type"):
         assert isinstance(p_type, Measure.Type)
