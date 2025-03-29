@@ -1,2 +1,5 @@
 # Ignore all CSV files
 *.csv
+
+# ignore jupyter notebook folders
+.ipynb_checkpoints
