@@ -222,7 +222,7 @@ class LogRegCCD:
 
     def get_params(self, deep: bool = False):
         params = dict()
-        params["C"] = self.C_
+        params["lambda"] = self.lambda_
         params["alpha"] = self.alpha_
         return params
 
