@@ -4,16 +4,44 @@ import matplotlib.pyplot as plt
 from implementation.measures import Measure
 
 class LogRegCCD:
-    """ this text is showed in 'Docstring' field when '?LogRegCCD' is used """
+    """
+    Logistic Regression classifier using cyclic coordinate descend optimization method.
+    
+    This class implements regularized logistic regression with Elastic-Net penalty.
+    
+    Parameters
+    ----------    
+    C : float, default=None
+        Inverse of regularization strength; must be a positive float.
+        Like in support vector machines, smaller values specify stronger
+        regularization.
+    
+    alpha : float, default=1.0
+        The Elastic-Net mixing parameter, with ``0 <= alpha <= 1``.
+        Setting ``alpha=0`` is equivalent to having ridge regularization (L2),
+        while setting ``alpha=1`` is equivalent to having lasso
+        regularization (L1). For ``0 < alpha <1``, the penalty is a
+        combination of L1 and L2.
 
-    __slots__ = ["beta0_", "beta_", "C_", "alpha_", "mean_", "std_", "classes_"]
+    Attributes
+    ----------
+    beta_ : ndarray of shape (n_features, )
+        Coefficient of the features in the decision function.
+    
+    beta0_ : float
+        Intercept (a.k.a. bias) added to the decision function.
+    
+        If `fit_intercept` is set to False, the intercept is set to zero.
+    """
 
-    def __init__(self, C=None, alpha=1.0):
+    __slots__ = ["beta0_", "beta_", "lambda_", "alpha_", "mean_", "std_", "classes_"]
+
+    def __init__(self, lambda_=None, alpha=1.0):
         # set intercept and coefficients to None as classifier is not fitted yet
         self.beta0_ = None
         self.beta_ = None
-        # set value of reciprocal of penalty parameter
-        self.C_ = C
+        # set value of penalty parameter
+        self.lambda_ = lambda_
         # set value of Elastic-Net L1 ratio
         self.alpha_ = alpha
         self.mean_ = 0
@@ -35,7 +63,7 @@ class LogRegCCD:
 
         return (X - self.mean_) / self.std_
 
-    def fit(self, X, y, max_iter=100, use_weights=True, fit_intercept=True):
+    def fit(self, X, y, max_iter=100, use_weights=True, fit_intercept=True, plot_coefficients=False):
         """
         Fit the model according to the given training data.
 
@@ -58,6 +86,9 @@ class LogRegCCD:
         fit_intercept : bool, default=True
             Specifies if a constant (a.k.a. bias or intercept) should be
             added to the decision function.
+
+        plot_coefficients : bool, default=False
+            If True plots how coefficients update based on iteration of algorithm.
 
         Returns
         -------
@@ -95,12 +126,15 @@ class LogRegCCD:
             weights = prior * (1 - prior)
 
         # if reciprocal of penalty parameter was not specified
-        if self.C_ is None:
+        if self.lambda_ is None:
             # then generate sequence of lambdas used in `warm-start` strategy
             lambdas = LogRegCCD.__generate_lambdas(X, y, self.alpha_, max_iter, use_weights, fit_intercept)
         else:
             # otherwise use specified value
-            lambdas = np.repeat(1 / self.C_, max_iter)
+            lambdas = np.repeat(self.lambda_, max_iter)
+
+        coefficients = []
+        loss = []
 
         # iterate over values of penalty parameters
         for lmbd in lambdas:
@@ -121,6 +155,23 @@ class LogRegCCD:
                 # update beta_j based on weighted optimization algorithm
                 self.beta_[j] = LogRegCCD.soft_threshold(s, lmbd * self.alpha_) / (wx_squared + lmbd * (1 - self.alpha_))
 
+            coefficients.append(self.beta_)
+            loss.append(LogRegCCD.cross_entropy(y, self.predict_proba(X)))
+
+        if plot_coefficients:
+            plt.plot(coefficients)
+            plt.xlabel("iteration")
+            plt.ylabel("coefficients values")
+            plt.legend([f"beta_{i + 1}" for i in range(p)])
+            plt.title("coefficients values vs iteration")
+            plt.show()
+
+            plt.plot(loss)
+            plt.xlabel("iteration")
+            plt.ylabel("cross-entropy value")
+            plt.title("cross-entropy value vs iteration")
+            plt.show()
+            
         return self
 
     def validate(self, X, y, measure: "Measure.Type"):
@@ -261,6 +312,10 @@ class LogRegCCD:
         return norm.cdf(x)
 
     @staticmethod
+    def cross_entropy(y_true, y_scores):
+        return -(y_true * np.log(y_scores) + (1 - y_true) * np.log(1 - y_scores)).mean()
+
+    @staticmethod
     def plot(X_train, y_train, X_valid, y_valid, measure_types: ("Measure.Type", list)):
         """ Based on train data, evaluate model with validation data based on passed measures depending on value of penalty parameter. """
 
@@ -279,7 +334,7 @@ class LogRegCCD:
 
         for i in range(len(lambdas)):
             # train model based on specified lambda
-            model = LogRegCCD(C=1 / lambdas[i]).fit(X_train, y_train)
+            model = LogRegCCD(lambda_=lambdas[i]).fit(X_train, y_train)
             # initiate list to store calculated measures for set penalty parameter
             tmp = []
             for measure_type in measure_types:
@@ -293,6 +348,7 @@ class LogRegCCD:
         plt.xlabel("lambda")
         plt.ylabel("measures values")
         plt.legend([Measure.from_type(measure_type).get_name() for measure_type in measure_types])
+        plt.title("Measure values vs penalty parameter value")
         plt.show()
 
         return
@@ -309,14 +365,15 @@ class LogRegCCD:
 
         for i in range(len(lambdas)):
             # train model based on specified lambda
-            model = LogRegCCD(C=1/lambdas[i]).fit(X_train, y_train)
+            model = LogRegCCD(lambda_=lambdas[i]).fit(X_train, y_train)
             # add values of estimated coefficients to the list
-            coefficients[i] = (model.beta0_, *model.beta_)
+            coefficients[i] = model.beta_
 
         plt.plot(lambdas, coefficients)
         plt.xlabel("lambda")
         plt.ylabel("coefficients values")
-        plt.legend([f"beta_{i}" for i in range(len(model.beta_) + 1)])
+        plt.legend([f"beta_{i + 1}" for i in range(len(model.beta_))])
+        plt.title("coefficients values vs penalty parameter value")
         plt.show()
 
         return
