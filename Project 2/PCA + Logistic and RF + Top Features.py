@@ -7,10 +7,9 @@ X_train_full = pd.read_csv('x_train.txt', delim_whitespace=True, header=None).va
 y_train_full = pd.read_csv('y_train.txt', delim_whitespace=True, header=None).values.ravel()
 X_test = pd.read_csv('x_test.txt', delim_whitespace=True, header=None).values
 
-# Ensure the labels are binary (0/1). If they are not 0/1, convert them.
-y_train_full = np.where(y_train_full == 1, 1, 0)  # This assumes '1' indicates high usage; adjust if needed.
+y_train_full = np.where(y_train_full == 1, 1, 0) 
 
-# Split training data into train (80%) and validation (20%)
+
 X_train, X_val, y_train, y_val = train_test_split(
     X_train_full, y_train_full, test_size=0.5, random_state=47, stratify=y_train_full
 )
@@ -28,20 +27,19 @@ from sklearn.ensemble import RandomForestClassifier
 full_rf = RandomForestClassifier(n_estimators=100, random_state=47)
 full_rf.fit(X_train, y_train)
 importances = full_rf.feature_importances_
-feat_indices_sorted = np.argsort(importances)[::-1]  # indices of features sorted by importance (desc)
+feat_indices_sorted = np.argsort(importances)[::-1]  
 
 # Define range of features to test
 feature_counts = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
                   25, 30, 35]
 max_feat = X_train.shape[1]
-# Ensure we don't use more features than exist
 feature_counts = [k for k in feature_counts if k <= max_feat]
 
 # Lists to collect metrics for each approach
-pca_acc = []      # accuracy on validation
-pca_reward = []   # total reward (EUR) on top-1000 selection
-pca_cost = []     # total cost (EUR) for features
-pca_score = []    # final score = reward - cost
+pca_acc = []      
+pca_reward = []   
+pca_cost = []     
+pca_score = []    
 
 rf_acc = []
 rf_reward = []
@@ -63,12 +61,11 @@ for k in feature_counts:
     
     # Validation predictions and accuracy
     val_preds = logreg.predict(X_val_pca)
-    val_proba = logreg.predict_proba(X_val_pca)[:, 1]  # probability of class 1 (high usage)
+    val_proba = logreg.predict_proba(X_val_pca)[:, 1]  
     accuracy = np.mean(val_preds == y_val)
     pca_acc.append(accuracy)
     
     # Determine reward on validation: pick top 1000 by probability
-    # (If validation set has fewer than 1000 samples, we'll take all of them for reward calculation)
     top_N = min(1000, X_val.shape[0])
     # indices of top_N highest predicted probabilities
     top_idx = np.argsort(val_proba)[::-1][:top_N]
@@ -81,14 +78,11 @@ for k in feature_counts:
     pca_cost.append(cost)
     pca_score.append(score)
     
-    # (We also generate predictions on X_test for potential use or inspection)
     test_proba = logreg.predict_proba(X_test_pca)[:, 1]
-    # We won't know true labels for X_test in practice; so we won't compute reward for test here.
     
     # --- Strategy 2: Random Forest (top-k features) ---
     # Select top k important feature indices
     topk_idx = feat_indices_sorted[:k]
-    # Subset the training and validation data to these features
     X_train_topk = X_train[:, topk_idx]
     X_val_topk   = X_val[:, topk_idx]
     X_test_topk  = X_test[:, topk_idx]
@@ -99,7 +93,7 @@ for k in feature_counts:
     
     # Validation predictions and accuracy
     val_preds_rf = rf.predict(X_val_topk)
-    val_proba_rf = rf.predict_proba(X_val_topk)[:, 1]  # probability of class 1
+    val_proba_rf = rf.predict_proba(X_val_topk)[:, 1] 
     accuracy_rf = np.mean(val_preds_rf == y_val)
     rf_acc.append(accuracy_rf)
     
@@ -113,19 +107,47 @@ for k in feature_counts:
     rf_cost.append(cost_rf)
     rf_score.append(score_rf)
     
-    # (Generate test probabilities for potential use)
     test_proba_rf = rf.predict_proba(X_test_topk)[:, 1]
     
-    # Optionally, print intermediate results for debugging
-    # print(f"k={k}: PCA+LogReg val_acc={accuracy:.3f}, reward={reward}, cost={cost}, score={score}")
-    # print(f"       RF val_acc={accuracy_rf:.3f}, reward={reward_rf}, cost={cost_rf}, score={score_rf}")
+    
 
-# After the loop, we have performance metrics for each approach at various feature counts.
-# Let's identify the best final score for each approach:
 best_pca_idx = int(np.argmax(pca_score))
 best_rf_idx  = int(np.argmax(rf_score))
+
 print(f"Best PCA+LogReg score: {pca_score[best_pca_idx]:.1f} EUR at k={feature_counts[best_pca_idx]} features")
 print(f"Best RandomForest score: {rf_score[best_rf_idx]:.1f} EUR at k={feature_counts[best_rf_idx]} features")
+
+# Choose the best model (based on final score)
+if pca_score[best_pca_idx] > rf_score[best_rf_idx]:
+    print("Using PCA + Logistic Regression as the final model.")
+    best_k = feature_counts[best_pca_idx]
+    # Use PCA + Logistic Regression
+    pca = PCA(n_components=best_k, random_state=47)
+    X_test_pca = pca.fit_transform(X_test_scaled)
+    logreg = LogisticRegression(random_state=47, max_iter=500)
+    logreg.fit(pca.fit_transform(X_train_scaled), y_train)
+    test_proba = logreg.predict_proba(X_test_pca)[:, 1]
+    selected_features = list(range(best_k))  
+else:
+    print("Using Random Forest as the final model.")
+    best_k = feature_counts[best_rf_idx]
+    # Use Random Forest
+    topk_idx = feat_indices_sorted[:best_k]
+    X_test_topk = X_test[:, topk_idx]
+    rf = RandomForestClassifier(n_estimators=100, random_state=42)
+    rf.fit(X_train[:, topk_idx], y_train)
+    test_proba = rf.predict_proba(X_test_topk)[:, 1]
+    selected_features = topk_idx.tolist()  
+
+# Select top 1000 customers based on predicted probabilities
+top_1000_idx = np.argsort(test_proba)[::-1][:1000]
+
+# Save the results to files
+np.savetxt("320618_obs.txt", top_1000_idx, fmt='%d')  # Indices of customers
+np.savetxt("320618_vars.txt", selected_features, fmt='%d')  # Indices of variables
+
+print("Results saved to 320618_obs.txt and 320618_vars.txt.")
+
 import matplotlib.pyplot as plt
 
 # Plot metrics vs number of features for both strategies
